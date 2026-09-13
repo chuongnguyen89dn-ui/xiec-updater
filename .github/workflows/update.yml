@@ -1,9 +1,11 @@
-name: Build full source category map
+name: Update Xiec movies and categories
 
 on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
   push:
     branches: [main]
-  workflow_dispatch:
 
 concurrency:
   group: xiec-updater-main
@@ -13,7 +15,34 @@ permissions:
   contents: read
 
 jobs:
+  update-new-movies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout updater
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dependencies
+        run: npm install
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Scan newest pages and update addon data
+        env:
+          SOURCE_URL: https://vlxx.phd/
+          XIEC_TOKEN: ${{ secrets.XIEC_TOKEN }}
+          TARGET_REPO: chuongnguyen89dn-ui/xiec
+          TARGET_PATH: data/ket_qua_1500_phim.json
+          START_PAGE: 1
+          MAX_PAGE: 3
+          STOP_EMPTY: 2
+          FAST_CONCURRENCY: 6
+        run: node fast-full-scan.js
+
   category-map:
+    needs: update-new-movies
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
@@ -31,6 +60,6 @@ jobs:
         env:
           SOURCE_URL: https://vlxx.phd/
           XIEC_TOKEN: ${{ secrets.XIEC_TOKEN }}
-          TARGET_REPO: hmtnvac-cpu/xiec
+          TARGET_REPO: chuongnguyen89dn-ui/xiec
           CATEGORY_PATH: data/site-categories.json
         run: node build-category-map.js
