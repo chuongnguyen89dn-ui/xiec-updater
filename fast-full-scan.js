@@ -31,7 +31,7 @@ async function pageCards(page){
       let vietsub=false;
       if(card){
         const badges=[...card.querySelectorAll('span,small,[class*="badge"],[class*="tag"],[class*="label"],[class*="quality"]')];
-        vietsub=badges.some(x=>/^viet\s*sub$/i.test(clean(x.textContent)))||!!card.querySelector('img[alt*="vietsub" i],img[title*="vietsub" i]');
+        vietsub=badges.some(x=>/^(viet\s*sub|vietsub)$/i.test(clean(x.textContent)))||!!card.querySelector('img[alt*="vietsub" i],img[title*="vietsub" i]');
       }
       out.push({url,vietsub});
     }
@@ -60,21 +60,15 @@ async function discover(browser,existing){
   return{fresh,recent};
 }
 
-function parseLabel(body,label,nextLabels){
-  const escaped=label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-  const next=nextLabels.map(x=>x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|');
-  const re=new RegExp(`${escaped}\\s*:?\\s*(.*?)(?=\\s+(?:${next})\\s*:?|$)`,'i');
-  return text((body.match(re)||[])[1]||'');
-}
-function parseMetaLabels(body){
-  const labels=['Mã phim','Ma phim','Diễn viên','Dien vien','Quốc gia','Quoc gia','Thời lượng','Thoi luong','Thể loại','The loai'];
-  const get=(names)=>{for(const n of names){const v=parseLabel(body,n,labels.filter(x=>x!==n));if(v)return v;}return'';};
-  const code=get(['Mã phim','Ma phim']).split(' ')[0];
-  const actorText=get(['Diễn viên','Dien vien']);
-  const actors=actorText?actorText.split(/[,|]/).map(text).filter(Boolean):[];
-  const country=get(['Quốc gia','Quoc gia']);
-  const runtime=get(['Thời lượng','Thoi luong']);
-  return{code,actors,country,runtime};
+function pickText(v){return text(v||'');}
+function parseMetaFromBody(body){
+  const b=pickText(body);
+  const code=(b.match(/(?:Mã\s*phim|Ma\s*phim)\s*:?\s*([A-Z0-9][A-Z0-9._-]{2,})/i)||[])[1]||'';
+  const runtime=(b.match(/(?:Thời\s*lượng|Thoi\s*luong)\s*:?\s*([^|•]+?)(?=\s+(?:Mã\s*phim|Ma\s*phim|Diễn\s*viên|Dien\s*vien|Quốc\s*gia|Quoc\s*gia|Thể\s*loại|The\s*loai)\b|$)/i)||[])[1]||'';
+  const country=(b.match(/(?:Quốc\s*gia|Quoc\s*gia)\s*:?\s*([^|•]+?)(?=\s+(?:Mã\s*phim|Ma\s*phim|Diễn\s*viên|Dien\s*vien|Thời\s*lượng|Thoi\s*luong|Thể\s*loại|The\s*loai)\b|$)/i)||[])[1]||'';
+  const actorText=(b.match(/(?:Diễn\s*viên|Dien\s*vien)\s*:?\s*([^|•]+?)(?=\s+(?:Mã\s*phim|Ma\s*phim|Quốc\s*gia|Quoc\s*gia|Thời\s*lượng|Thoi\s*luong|Thể\s*loại|The\s*loai)\b|$)/i)||[])[1]||'';
+  const actors=actorText?actorText.split(/[,|•]/).map(pickText).filter(Boolean):[];
+  return{code:pickText(code),runtime:pickText(runtime),country:pickText(country),actors};
 }
 
 async function extractMovie(browser,item,index,total){
@@ -85,20 +79,28 @@ async function extractMovie(browser,item,index,total){
   const cap=u=>{if(/play\.vlstream\.net\/embed\/.*\/s1/i.test(u))s1=u;if(/play\.vlstream\.net\/embed\/.*\/s2/i.test(u))s2=u;};
   p.on('request',r=>cap(r.url()));p.on('response',r=>cap(r.url()));
   try{
-    await p.route('**/*',r=>['image','font','stylesheet'].includes(r.request().resourceType())?r.abort():r.continue());
+    await p.route('**/*',r=>['image','font'].includes(r.request().resourceType())?r.abort():r.continue());
     await p.goto(url,{waitUntil:'domcontentloaded',timeout:30000});
-    await p.waitForFunction(()=>/(?:Mã phim|Ma phim|Diễn viên|Dien vien|Quốc gia|Quoc gia|Thời lượng|Thoi luong|Thể loại|The loai)/i.test(document.body?.textContent||''),{timeout:3500}).catch(()=>{});
-    await p.waitForTimeout(350);
+    await p.waitForTimeout(1800);
     if(!s1)s1=p.frames().map(f=>f.url()).find(u=>/play\.vlstream\.net\/embed\/.*\/s1/i.test(u))||'';
     const meta=await p.evaluate(()=>{
       const txt=s=>(s||'').replace(/\s+/g,' ').trim();
+      const uniq=a=>[...new Set(a.map(txt).filter(Boolean))];
       const title=txt(document.querySelector('h1')?.textContent)||txt(document.querySelector('meta[property="og:title"]')?.content)||txt(document.title);
       const poster=document.querySelector('meta[property="og:image"]')?.content||'';
       const preferred=document.querySelector('[itemprop="description"],.video-description,.description,.entry-description,.post-description');
       const description=txt(preferred?.textContent)||txt(document.querySelector('meta[property="og:description"]')?.content)||txt(document.querySelector('meta[name="description"]')?.content)||'';
-      const body=txt(document.body?.textContent||document.body?.innerText||'');
-      const vietsub=[...document.querySelectorAll('a[href],span,small,[class*="badge"],[class*="tag"],[class*="label"]')].some(el=>/^viet\s*sub$/i.test(txt(el.textContent))&&(!el.href||/\/vietsub\/?/i.test(el.href)||/vietsub/i.test(el.className||'')));
-      return{title,poster,description,body,vietsub};
+      const body=txt(document.body?.innerText||document.body?.textContent||'');
+      const links=[...document.querySelectorAll('a[href]')].map(a=>({href:a.href||'',text:txt(a.textContent)}));
+      const actors=uniq(links.filter(x=>/\/(dien-vien|dienvien|actor|actors)\//i.test(x.href)).map(x=>x.text));
+      const countries=uniq(links.filter(x=>/\/(quoc-gia|quocgia|country)\//i.test(x.href)).map(x=>x.text));
+      const genres=uniq(links.filter(x=>/\/(vietsub|khong-che|hoc-sinh|vung-trom|cap-3|chau-au|phim-sex-hay)\/?/i.test(x.href)).map(x=>x.text));
+      const labeled=[...document.querySelectorAll('li,p,div,span')].map(el=>txt(el.textContent)).filter(t=>/^(Mã\s*phim|Ma\s*phim|Diễn\s*viên|Dien\s*vien|Quốc\s*gia|Quoc\s*gia|Thời\s*lượng|Thoi\s*luong|Thể\s*loại|The\s*loai)\s*:?/i.test(t)&&t.length<800);
+      const labelText=uniq(labeled).join(' | ');
+      const code=(labelText.match(/(?:Mã\s*phim|Ma\s*phim)\s*:?\s*([A-Z0-9][A-Z0-9._-]{2,})/i)||body.match(/(?:Mã\s*phim|Ma\s*phim)\s*:?\s*([A-Z0-9][A-Z0-9._-]{2,})/i)||[])[1]||'';
+      const runtime=(labelText.match(/(?:Thời\s*lượng|Thoi\s*luong)\s*:?\s*([^|]+)/i)||body.match(/(?:Thời\s*lượng|Thoi\s*luong)\s*:?\s*([0-9]{1,3}\s*(?:phút|phut|minutes?|mins?))/i)||[])[1]||'';
+      const vietsub=links.some(x=>/\/vietsub\/?/i.test(x.href))||genres.some(g=>/viet\s*sub/i.test(g))||[...document.querySelectorAll('span,small,[class*="badge"],[class*="tag"],[class*="label"]')].some(el=>/^(viet\s*sub|vietsub)$/i.test(txt(el.textContent)));
+      return{title,poster,description,body,labelText,actors,country:countries[0]||'',runtime:txt(runtime),code:txt(code),genres,vietsub};
     }).catch(()=>({}));
     for(const f of p.frames()){
       const ok=await f.evaluate(()=>{const c=s=>(s||'').replace(/\s+/g,' ').trim();const e=[...document.querySelectorAll('[onclick],button,a,li,[role=button]')].find(x=>c(x.textContent)==='#2');if(!e)return false;e.click();return true}).catch(()=>false);
@@ -109,9 +111,13 @@ async function extractMovie(browser,item,index,total){
     const id=pageId(url),streams=[];
     if(file1&&/\/manifest-s1\//i.test(file1))streams.push({name:'#1',url:file1});
     if(file2&&/\/manifest-s2\//i.test(file2))streams.push({name:'#2',url:file2});
-    const labels=parseMetaLabels(meta.body||'');
-    const isVietsub=listingVietsub||meta.vietsub===true;
-    console.log(`FAST_MOVIE ${index+1}/${total} id=${id} vietsub=${isVietsub?'yes':'no'} code=${labels.code||'-'} actors=${labels.actors.length} country=${labels.country||'-'} runtime=${labels.runtime||'-'} s1=${streams.some(x=>x.name==='#1')?'ok':'miss'} s2=${streams.some(x=>x.name==='#2')?'ok':'miss'}`);
+    const bodyMeta=parseMetaFromBody(`${meta.labelText||''} ${meta.body||''}`);
+    const actors=(meta.actors?.length?meta.actors:bodyMeta.actors)||[];
+    const code=meta.code||bodyMeta.code||'';
+    const country=meta.country||bodyMeta.country||'';
+    const runtime=meta.runtime||bodyMeta.runtime||'';
+    const isVietsub=listingVietsub||meta.vietsub===true||(meta.genres||[]).some(g=>/viet\s*sub/i.test(g));
+    console.log(`FAST_MOVIE ${index+1}/${total} id=${id} vietsub=${isVietsub?'yes':'no'} code=${code||'-'} actors=${actors.length} country=${country||'-'} runtime=${runtime||'-'} s1=${streams.some(x=>x.name==='#1')?'ok':'miss'} s2=${streams.some(x=>x.name==='#2')?'ok':'miss'}`);
     return{
       id:`movie_${id}`,
       title:meta.title||`movie_${id}`,
@@ -119,10 +125,10 @@ async function extractMovie(browser,item,index,total){
       description:meta.description||'',
       page_url:url,
       vietsub:isVietsub,
-      code:labels.code||'',
-      actors:labels.actors,
-      country:labels.country||'',
-      runtime:labels.runtime||'',
+      code,
+      actors,
+      country,
+      runtime,
       manifest_url:file1||'',
       manifest_detected_by:file1?'direct_s1':'',
       mp4_url:'',
@@ -158,7 +164,7 @@ function mergeRecord(old,item){
       const item=await extractMovie(browser,recent[i],i,recent.length);
       if(!item)continue;
       const idx=movies.findIndex(m=>norm(m.page_url)===norm(item.page_url));
-      if(idx>=0){movies[idx]=mergeRecord(movies[idx],item);changed=true;console.log(`FAST_ENRICH ${i+1}/${recent.length} id=${pageId(item.page_url)}`);}
+      if(idx>=0){const before=JSON.stringify(movies[idx]);movies[idx]=mergeRecord(movies[idx],item);if(JSON.stringify(movies[idx])!==before)changed=true;console.log(`FAST_ENRICH ${i+1}/${recent.length} id=${pageId(item.page_url)}`);}
     }
   }
 
@@ -172,6 +178,6 @@ function mergeRecord(old,item){
 
   if(added.length){added.sort((a,b)=>Number(pageId(b.page_url))-Number(pageId(a.page_url)));movies=[...added,...movies];changed=true;}
   if(!changed){console.log('FAST_DONE no_changes');return;}
-  await writeTarget(sha,movies,`Homepage update: +${added.length} new; enriched ${recent.length} recent movies`);
+  await writeTarget(sha,movies,`Homepage update: +${added.length} new; repaired metadata for ${recent.length} recent movies`);
   console.log(`FAST_DONE added=${added.length} enriched=${recent.length} total=${movies.length}`);
 })().catch(e=>{console.error('FAST_FATAL',e);process.exit(1)});
