@@ -63,7 +63,7 @@ async function discover(browser,existing){
 function parseLabel(body,label,nextLabels){
   const escaped=label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
   const next=nextLabels.map(x=>x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|');
-  const re=new RegExp(`${escaped}\\s*:\\s*(.*?)(?=\\s+(?:${next})\\s*:|$)`,'i');
+  const re=new RegExp(`${escaped}\\s*:?\\s*(.*?)(?=\\s+(?:${next})\\s*:?|$)`,'i');
   return text((body.match(re)||[])[1]||'');
 }
 function parseMetaLabels(body){
@@ -86,7 +86,9 @@ async function extractMovie(browser,item,index,total){
   p.on('request',r=>cap(r.url()));p.on('response',r=>cap(r.url()));
   try{
     await p.route('**/*',r=>['image','font','stylesheet'].includes(r.request().resourceType())?r.abort():r.continue());
-    await p.goto(url,{waitUntil:'domcontentloaded',timeout:30000});await p.waitForTimeout(500);
+    await p.goto(url,{waitUntil:'domcontentloaded',timeout:30000});
+    await p.waitForFunction(()=>/(?:Mã phim|Ma phim|Diễn viên|Dien vien|Quốc gia|Quoc gia|Thời lượng|Thoi luong|Thể loại|The loai)/i.test(document.body?.textContent||''),{timeout:3500}).catch(()=>{});
+    await p.waitForTimeout(350);
     if(!s1)s1=p.frames().map(f=>f.url()).find(u=>/play\.vlstream\.net\/embed\/.*\/s1/i.test(u))||'';
     const meta=await p.evaluate(()=>{
       const txt=s=>(s||'').replace(/\s+/g,' ').trim();
@@ -94,8 +96,9 @@ async function extractMovie(browser,item,index,total){
       const poster=document.querySelector('meta[property="og:image"]')?.content||'';
       const preferred=document.querySelector('[itemprop="description"],.video-description,.description,.entry-description,.post-description');
       const description=txt(preferred?.textContent)||txt(document.querySelector('meta[property="og:description"]')?.content)||txt(document.querySelector('meta[name="description"]')?.content)||'';
-      const body=txt(document.body?.innerText||'');
-      return{title,poster,description,body};
+      const body=txt(document.body?.textContent||document.body?.innerText||'');
+      const vietsub=[...document.querySelectorAll('a[href],span,small,[class*="badge"],[class*="tag"],[class*="label"]')].some(el=>/^viet\s*sub$/i.test(txt(el.textContent))&&(!el.href||/\/vietsub\/?/i.test(el.href)||/vietsub/i.test(el.className||'')));
+      return{title,poster,description,body,vietsub};
     }).catch(()=>({}));
     for(const f of p.frames()){
       const ok=await f.evaluate(()=>{const c=s=>(s||'').replace(/\s+/g,' ').trim();const e=[...document.querySelectorAll('[onclick],button,a,li,[role=button]')].find(x=>c(x.textContent)==='#2');if(!e)return false;e.click();return true}).catch(()=>false);
@@ -107,14 +110,15 @@ async function extractMovie(browser,item,index,total){
     if(file1&&/\/manifest-s1\//i.test(file1))streams.push({name:'#1',url:file1});
     if(file2&&/\/manifest-s2\//i.test(file2))streams.push({name:'#2',url:file2});
     const labels=parseMetaLabels(meta.body||'');
-    console.log(`FAST_MOVIE ${index+1}/${total} id=${id} vietsub=${listingVietsub?'yes':'no'} code=${labels.code||'-'} actors=${labels.actors.length} s1=${streams.some(x=>x.name==='#1')?'ok':'miss'} s2=${streams.some(x=>x.name==='#2')?'ok':'miss'}`);
+    const isVietsub=listingVietsub||meta.vietsub===true;
+    console.log(`FAST_MOVIE ${index+1}/${total} id=${id} vietsub=${isVietsub?'yes':'no'} code=${labels.code||'-'} actors=${labels.actors.length} country=${labels.country||'-'} runtime=${labels.runtime||'-'} s1=${streams.some(x=>x.name==='#1')?'ok':'miss'} s2=${streams.some(x=>x.name==='#2')?'ok':'miss'}`);
     return{
       id:`movie_${id}`,
       title:meta.title||`movie_${id}`,
       poster:meta.poster||'',
       description:meta.description||'',
       page_url:url,
-      vietsub:listingVietsub,
+      vietsub:isVietsub,
       code:labels.code||'',
       actors:labels.actors,
       country:labels.country||'',
