@@ -15,26 +15,23 @@ permissions:
   contents: read
 
 jobs:
-  probe-manko:
+  patch-two-latest:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout updater
-        uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Install dependencies
-        run: npm install
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-      - name: Probe supplied Manko movie record
+      - name: Enrich SNOS-357 and MIKR-084
         env:
-          MANKO_URL: https://manko.fun/movie-info/69e11f53131836087ea893b3?series=false
-        run: node probe-manko.js
+          XIEC_TOKEN: ${{ secrets.XIEC_TOKEN }}
+          TARGET_REPO: chuongnguyen89dn-ui/xiec
+          TARGET_PATH: data/ket_qua_1500_phim.json
+        run: node patch-two-latest-metadata.js
 
   update-new-movies:
+    needs: patch-two-latest
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
