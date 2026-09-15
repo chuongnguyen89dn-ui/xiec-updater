@@ -15,9 +15,9 @@ permissions:
   contents: read
 
 jobs:
-  probe-japansm:
+  probe-demo-images:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,20 +27,21 @@ jobs:
         run: npm install
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Probe SNOS-357 JapanSM gallery
-        run: node probe-japansm-snos357.js
+      - name: Probe JapanSM and JavSubtitled images
+        run: node probe-demo-images.js
       - name: Upload probe output
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: japansm-snos357-probe
+          name: demo-image-probe
           path: |
-            japansm-snos357-result.json
-            japansm-snos357.html
+            demo-image-probe.json
+            probe-snos-357.html
+            probe-mikr-084.html
           if-no-files-found: ignore
 
   patch-two-latest:
-    needs: probe-japansm
+    needs: probe-demo-images
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
