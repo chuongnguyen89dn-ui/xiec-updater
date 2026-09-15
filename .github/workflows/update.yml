@@ -27,7 +27,7 @@ jobs:
         run: npm install
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Probe JapanSM and JavSubtitled images
+      - name: Probe JavSubtitled first, JapanSM only if needed
         run: node probe-demo-images.js
       - name: Upload probe output
         if: always()
@@ -36,8 +36,8 @@ jobs:
           name: demo-image-probe
           path: |
             demo-image-probe.json
-            probe-snos-357.html
-            probe-mikr-084.html
+            probe-*-primary.html
+            probe-*-fallback.html
           if-no-files-found: ignore
 
   patch-two-latest:
