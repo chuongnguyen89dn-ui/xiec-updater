@@ -21,17 +21,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: Install dependencies
-        run: npm install
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        with: { node-version: '20' }
+      - run: npm install
+      - run: npx playwright install --with-deps chromium
       - name: Probe JavSubtitled first, JapanSM only if needed
         run: node probe-demo-images.js
-      - name: Upload probe output
+      - uses: actions/upload-artifact@v4
         if: always()
-        uses: actions/upload-artifact@v4
         with:
           name: demo-image-probe
           path: |
@@ -40,40 +36,18 @@ jobs:
             probe-*-fallback.html
           if-no-files-found: ignore
 
-  patch-two-latest:
-    needs: probe-demo-images
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: Enrich SNOS-357 and MIKR-084
-        env:
-          XIEC_TOKEN: ${{ secrets.XIEC_TOKEN }}
-          TARGET_REPO: chuongnguyen89dn-ui/xiec
-          TARGET_PATH: data/ket_qua_1500_phim.json
-        run: node patch-two-latest-metadata.js
-
   update-new-movies:
-    needs: patch-two-latest
+    needs: probe-demo-images
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
-      - name: Checkout updater
-        uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: Install dependencies
-        run: npm install
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-      - name: Apply current metadata selectors
-        run: node patch-fast-meta.js
-      - name: Scan newest pages and update addon data
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm install
+      - run: npx playwright install --with-deps chromium
+      - run: node patch-fast-meta.js
+      - name: Scan newest pages
         env:
           SOURCE_URL: https://vlxx.phd/
           XIEC_TOKEN: ${{ secrets.XIEC_TOKEN }}
@@ -86,22 +60,32 @@ jobs:
           ENRICH_RECENT: 30
         run: node fast-full-scan.js
 
-  category-map:
+  patch-two-latest:
     needs: update-new-movies
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Apply verified enrichment last
+        env:
+          XIEC_TOKEN: ${{ secrets.XIEC_TOKEN }}
+          TARGET_REPO: chuongnguyen89dn-ui/xiec
+          TARGET_PATH: data/ket_qua_1500_phim.json
+        run: node patch-two-latest-metadata.js
+
+  category-map:
+    needs: patch-two-latest
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
-      - name: Checkout updater
-        uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: Install dependencies
-        run: npm install
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-      - name: Crawl every page of each approved category and write map
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm install
+      - run: npx playwright install --with-deps chromium
+      - name: Crawl categories
         env:
           SOURCE_URL: https://vlxx.phd/
           XIEC_TOKEN: ${{ secrets.XIEC_TOKEN }}
