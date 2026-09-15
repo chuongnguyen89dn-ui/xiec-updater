@@ -54,3 +54,11 @@ CAP NHAT KINH NGHIEM 2026-09-11:
 - Batch lon: concurrency vua phai, checkpoint moi 10 phim, ghi ket qua ngay, retry rieng phim loi.
 - Khi thay doi catalog manifest, bump version/catalog ID de tranh cache client; nhung can kiem tra deploy live truoc khi ket luan giao dien da doi.
 - "tiep tuc du an" phai duoc NOI THEM sau moi moc quan trong o ca repo addon va updater; day la handoff chinh, khong doi ket thuc moi ghi.
+
+CAP NHAT 2026-09-15 — THU NGHIEM METADATA 2 PHIM MOI:
+- Da tao patch rieng cho SNOS-357 va MIKR-084, giu nguyen stream/poster/du lieu Xiec dang tot va chi bo sung metadata.
+- GitHub runner truy cap thanh cong JapanSM SNOS-357 (HTTP 200), lay duoc cover goc va preview/snapshot goc.
+- SNOS-357: ngay 2026-08-07, 118 phut, director Inaball, actor Niko Kawagoe; preview JapanSM duoc ghi vao preview/snapshots; cover nguon duoc luu rieng, khong tu y thay poster Xiec.
+- Sua URL anh Niko Kawagoe sang file Wikimedia Commons da xac minh.
+- MIKR-084: ngay 2026-04-17, MOODYZ, actors Takashi Haneda + Aki Sasaki; giu runtime Xiec lay tu stream; anh Aki da co, khong gan anh Takashi neu chua xac minh.
+- Muc tieu tiep theo: tu dong hoa cach tim metadata/cover/preview theo code cho phim moi sau khi 2 record thu nghiem duoc xac minh tren addon.
