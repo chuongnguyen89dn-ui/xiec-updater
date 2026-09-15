@@ -29,6 +29,8 @@ jobs:
         run: npm install
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
+      - name: Apply current metadata selectors
+        run: node patch-fast-meta.js
       - name: Scan newest pages and update addon data
         env:
           SOURCE_URL: https://vlxx.phd/
@@ -39,6 +41,7 @@ jobs:
           MAX_PAGE: 3
           STOP_EMPTY: 2
           FAST_CONCURRENCY: 6
+          ENRICH_RECENT: 30
         run: node fast-full-scan.js
 
   category-map:
