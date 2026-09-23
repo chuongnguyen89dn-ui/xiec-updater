@@ -107,13 +107,15 @@ async function extractMovie(browser,item,index,total){
       if(ok)break;
     }
     for(let i=0;i<12&&!s2;i++){await p.waitForTimeout(180);s2=p.frames().map(f=>f.url()).find(u=>/play\.vlstream\.net\/embed\/.*\/s2/i.test(u))||s2;}
+    if(!s1||!s2){const controls=await p.locator('button,a,li,[role=button]').all().catch(()=>[]);for(const el of controls){const t=pickText(await el.textContent().catch(()=>''));if(!/^#?[12]$/.test(t))continue;await el.click({timeout:1500}).catch(()=>{});await p.waitForTimeout(450);for(const fr of p.frames())cap(fr.url());}}
     const[file1,file2]=await Promise.all([embedFile(s1),embedFile(s2)]);
     const id=pageId(url),streams=[];
     if(file1&&/\/manifest-s1\//i.test(file1))streams.push({name:'#1',url:file1});
     if(file2&&/\/manifest-s2\//i.test(file2))streams.push({name:'#2',url:file2});
     const bodyMeta=parseMetaFromBody(`${meta.labelText||''} ${meta.body||''}`);
-    const actors=(meta.actors?.length?meta.actors:bodyMeta.actors)||[];
     const code=meta.code||bodyMeta.code||'';
+    const cleanActorName=v=>pickText(v).replace(code,new RegExp(code,'i').test(pickText(v).slice(0,code.length))?'':'').replace(/^(?:Mã\s*phim|Ma\s*phim|Diễn\s*viên|Dien\s*vien)\s*[:：]?\s*/i,'').trim();
+    const actors=[...new Set(((meta.actors?.length?meta.actors:bodyMeta.actors)||[]).flatMap(v=>String(v||'').split(/[,|•]/)).map(cleanActorName).filter(v=>v&&v.toUpperCase()!==String(code).toUpperCase()))];
     const country=meta.country||bodyMeta.country||'';
     const runtime=meta.runtime||bodyMeta.runtime||'';
     const isVietsub=listingVietsub||meta.vietsub===true||(meta.genres||[]).some(g=>/viet\s*sub/i.test(g));
