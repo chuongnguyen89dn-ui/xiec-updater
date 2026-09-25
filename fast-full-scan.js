@@ -117,7 +117,27 @@ async function extractMovie(browser,item,index,total){
     const cleanActorName=v=>pickText(v).replace(code,new RegExp(code,'i').test(pickText(v).slice(0,code.length))?'':'').replace(/^(?:Mã\s*phim|Ma\s*phim|Diễn\s*viên|Dien\s*vien)\s*[:：]?\s*/i,'').trim();
     const actors=[...new Set(((meta.actors?.length?meta.actors:bodyMeta.actors)||[]).flatMap(v=>String(v||'').split(/[,|•]/)).map(cleanActorName).filter(v=>v&&v.toUpperCase()!==String(code).toUpperCase()))];
     const country=meta.country||bodyMeta.country||'';
-    const runtime=meta.runtime||bodyMeta.runtime||'';
+    let runtime=meta.runtime||bodyMeta.runtime||'';
+    // Final fallback: inspect rendered detail text for common runtime forms even when label/value are split.
+    if(!runtime){
+      runtime=await p.evaluate(()=>{
+        const txt=s=>(s||'').replace(/\s+/g,' ').trim();
+        const all=txt(document.body?.innerText||document.body?.textContent||'');
+        const patterns=[
+          /(?:Thời\s*lượng|Thoi\s*luong|Runtime|Duration)\s*[:：-]?\s*(\d{1,3}\s*(?:phút|phut|minutes?|mins?|min))/i,
+          /(\d{1,3}\s*(?:phút|phut|minutes?|mins?|min))\s*(?=(?:Mã\s*phim|Ma\s*phim|Diễn\s*viên|Dien\s*vien|Quốc\s*gia|Quoc\s*gia|Thể\s*loại|The\s*loai|$))/i
+        ];
+        for(const re of patterns){const m=all.match(re);if(m)return txt(m[1]);}
+        for(const el of [...document.querySelectorAll('*')]){
+          const t=txt(el.textContent);
+          if(!/^(Thời\s*lượng|Thoi\s*luong|Runtime|Duration)\s*[:：-]?$/i.test(t))continue;
+          let n=el.nextElementSibling;
+          while(n){const v=txt(n.textContent);const m=v.match(/\d{1,3}\s*(?:phút|phut|minutes?|mins?|min)/i);if(m)return txt(m[0]);n=n.nextElementSibling;}
+          const par=el.parentElement;if(par){const v=txt(par.textContent);const m=v.match(/\d{1,3}\s*(?:phút|phut|minutes?|mins?|min)/i);if(m)return txt(m[0]);}
+        }
+        return '';
+      }).catch(()=>'');
+    }
     const isVietsub=listingVietsub||meta.vietsub===true||(meta.genres||[]).some(g=>/viet\s*sub/i.test(g));
     console.log(`FAST_MOVIE ${index+1}/${total} id=${id} vietsub=${isVietsub?'yes':'no'} code=${code||'-'} actors=${actors.length} country=${country||'-'} runtime=${runtime||'-'} s1=${streams.some(x=>x.name==='#1')?'ok':'miss'} s2=${streams.some(x=>x.name==='#2')?'ok':'miss'}`);
     return{
